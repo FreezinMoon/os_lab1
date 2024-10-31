@@ -1,10 +1,12 @@
 CXX = g++
-CXXFLAGS = -Wall -fopenmp
-TARGET = loader1_parallel
+CXXFLAGS = -Wall -O2
+TARGET = my_shell
 
 .PHONY: all clean
 
-all:
+all: $(TARGET)
+
+$(TARGET): main.cpp
 	$(CXX) $(CXXFLAGS) main.cpp -o $(TARGET)
 
 clean:
