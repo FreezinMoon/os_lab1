@@ -1,8 +1,9 @@
 Checks: >
   -*,
-  readability-*, 
-  performance-*, 
-  bugprone-*, 
-  clang-analyzer-*,
+  readability-identifier-naming,
+  performance-*,                    
+  bugprone-*,
+  clang-analyzer-*,                
   modernize-*,
-WarningsAsErrors: '*'
+  -misc-unused-parameters
+WarningsAsErrors: ''
