@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up C++ compiler
+        run: sudo apt-get install -y build-essential clang clang-format clang-tidy
+
+      - name: Run linters
+        run: |
+          clang-tidy **/*.cpp
+          clang-format -i **/*.cpp
+
+      - name: Build Project
+        run: |
+          make -C loader1/regular optimized
+          make -C loader1/regular nonoptimized
+          make -C loader1/parallel
+          make -C loader2/regular optimized
+          make -C loader2/regular nonoptimized
+          make -C loader2/parallel
+          make -C shell
+
+      - name: Run Smoke Tests
+        run: |
+          bash tests/smoke/test_loader1.sh
+          bash tests/smoke/test_loader2.sh
+          bash tests/smoke/test_shell.sh
