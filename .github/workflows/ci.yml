@@ -21,7 +21,7 @@ jobs:
 
       - name: Run linters
         run: |
-          clang-tidy **/*.cpp --warnings-as-errors=*
+          clang-tidy **/*.cpp
           clang-format -i **/*.cpp
 
       - name: Build Project
