@@ -3,24 +3,24 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <iostream>
 #include <sstream>
 #include <vector>
-#include <cstdlib>
-#include <ctime>
 
 #define STACK_SIZE (1024 * 1024)
 
 struct Command {
-    std::vector<char*> args;
+    std::vector<char *> args;
     std::string inputFile;
     std::string outputFile;
     bool append = false;
 };
 
 int childFunction(void *arg) {
-    Command *command = static_cast<Command*>(arg);
+    Command *command = static_cast<Command *>(arg);
 
     if (!command->inputFile.empty()) {
         int fd = open(command->inputFile.c_str(), O_RDONLY);
@@ -167,7 +167,8 @@ void parseAndExecuteCommand(const std::string &line) {
     }
 
     clock_gettime(CLOCK_MONOTONIC, &end);
-    double elapsed = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+    double elapsed =
+        (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
     printf("Elapsed time: %f seconds\n", elapsed);
 }
 
