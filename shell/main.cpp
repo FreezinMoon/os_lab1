@@ -19,8 +19,31 @@ struct Command {
     bool append = false;
 };
 
+struct ChildArgs {
+    Command *command;
+    int input_fd;
+    int output_fd;
+};
+
 int childFunction(void *arg) {
-    Command *command = static_cast<Command *>(arg);
+    ChildArgs *childArgs = static_cast<ChildArgs *>(arg);
+    Command *command = childArgs->command;
+
+    if (childArgs->input_fd != STDIN_FILENO) {
+        if (dup2(childArgs->input_fd, STDIN_FILENO) == -1) {
+            perror("dup2 input_fd failed");
+            exit(EXIT_FAILURE);
+        }
+        close(childArgs->input_fd);
+    }
+
+    if (childArgs->output_fd != STDOUT_FILENO) {
+        if (dup2(childArgs->output_fd, STDOUT_FILENO) == -1) {
+            perror("dup2 output_fd failed");
+            exit(EXIT_FAILURE);
+        }
+        close(childArgs->output_fd);
+    }
 
     if (!command->inputFile.empty()) {
         int fd = open(command->inputFile.c_str(), O_RDONLY);
@@ -28,7 +51,10 @@ int childFunction(void *arg) {
             perror("open input file");
             exit(EXIT_FAILURE);
         }
-        dup2(fd, STDIN_FILENO);
+        if (dup2(fd, STDIN_FILENO) == -1) {
+            perror("dup2 inputFile failed");
+            exit(EXIT_FAILURE);
+        }
         close(fd);
     }
 
@@ -39,7 +65,10 @@ int childFunction(void *arg) {
             perror("open output file");
             exit(EXIT_FAILURE);
         }
-        dup2(fd, STDOUT_FILENO);
+        if (dup2(fd, STDOUT_FILENO) == -1) {
+            perror("dup2 outputFile failed");
+            exit(EXIT_FAILURE);
+        }
         close(fd);
     }
 
@@ -52,42 +81,60 @@ int childFunction(void *arg) {
 }
 
 void executePipeline(std::vector<Command> &commands) {
-    std::string tempFilePrefix = "/tmp/shell_pipe_";
-    std::string inputTempFile;
-    std::string outputTempFile;
+    int numCommands = commands.size();
+    int prev_fd = -1;
+    std::vector<pid_t> pids;
 
-    for (size_t i = 0; i < commands.size(); ++i) {
-        if (i > 0) {
-            inputTempFile = tempFilePrefix + std::to_string(i - 1);
-            commands[i].inputFile = inputTempFile;
+    for (int i = 0; i < numCommands; ++i) {
+        int pipefd[2];
+        if (i < numCommands - 1) {
+            if (pipe(pipefd) == -1) {
+                perror("pipe failed");
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            pipefd[0] = -1;
+            pipefd[1] = -1;
         }
-        if (i < commands.size() - 1) {
-            outputTempFile = tempFilePrefix + std::to_string(i);
-            commands[i].outputFile = outputTempFile;
-            commands[i].append = false;
-        }
+
+        ChildArgs *childArgs = new ChildArgs();
+        childArgs->command = &commands[i];
+        childArgs->input_fd = (prev_fd != -1) ? prev_fd : STDIN_FILENO;
+        childArgs->output_fd =
+            (i < numCommands - 1) ? pipefd[1] : STDOUT_FILENO;
 
         char *stack = new char[STACK_SIZE];
         char *stackTop = stack + STACK_SIZE;
-        pid_t pid = clone(childFunction, stackTop, SIGCHLD, &commands[i]);
+
+        pid_t pid = clone(childFunction, stackTop, SIGCHLD, childArgs);
         if (pid == -1) {
             perror("clone failed");
             delete[] stack;
+            delete childArgs;
             exit(EXIT_FAILURE);
         }
-        waitpid(pid, nullptr, 0);
-        delete[] stack;
 
-        if (!inputTempFile.empty()) {
-            unlink(inputTempFile.c_str());
+        pids.push_back(pid);
+
+        if (prev_fd != -1) {
+            close(prev_fd);
         }
+        if (pipefd[1] != -1) {
+            close(pipefd[1]);
+        }
+        prev_fd = pipefd[0];
     }
 
-    if (!outputTempFile.empty()) {
-        unlink(outputTempFile.c_str());
+    if (prev_fd != -1) {
+        close(prev_fd);
+    }
+
+    for (pid_t pid : pids) {
+        waitpid(pid, nullptr, 0);
     }
 }
 
+// Обработка встроенных команд
 bool handleBuiltInCommands(char *args[]) {
     if (strcmp(args[0], "cd") == 0) {
         if (args[1] == nullptr) {
@@ -117,9 +164,9 @@ void parseAndExecuteCommand(const std::string &line) {
     std::string token;
     Command command;
     std::vector<Command> pipelineCommands;
-
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
+
     while (stream >> token) {
         if (token == ">") {
             stream >> command.outputFile;
